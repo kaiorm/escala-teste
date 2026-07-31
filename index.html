@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escala de Voos do Kaio</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --azul-aviacao: #1e3a8a;
+            --fundo-pagina: #f3f4f6;
+            --fundo-card: #ffffff;
+            --texto-principal: #1f2937;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--fundo-pagina);
+            color: var(--texto-principal);
+        }
+        
+        header {
+            background-color: var(--azul-aviacao);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        header h1 {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: 1px;
+        }
+        
+        #relogio-bsb {
+            margin-top: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 300;
+            color: #d1d5db;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+        
+        .escala-container {
+            background: var(--fundo-card);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .contador-folga {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+        }
+
+        .contador-folga h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.4rem;
+        }
+
+        .contador-folga p {
+            margin: 0;
+            font-size: 1.1rem;
+            opacity: 0.95;
+        }
+
+        .dia-bloco {
+            margin-bottom: 2rem;
+            border-bottom: 2px dashed #e5e7eb;
+            padding-bottom: 1rem;
+        }
+
+        .dia-bloco:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .dia-titulo {
+            color: var(--azul-aviacao);
+            margin-top: 0;
+            margin-bottom: 1rem;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .painel-jornada {
+            background-color: #e0f2fe; 
+            color: #0369a1; 
+            padding: 12px 15px; 
+            border-radius: 6px; 
+            margin-bottom: 1rem; 
+            font-weight: bold; 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 15px;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .voo-card {
+            background: var(--fundo-pagina);
+            border-left: 5px solid var(--azul-aviacao);
+            padding: 1.2rem;
+            margin-bottom: 1rem;
+            border-radius: 6px;
+        }
+
+        .card-folga { border-left-color: #10b981; }
+        .card-reserva { border-left-color: #f59e0b; }
+        .card-treino { border-left-color: #8b5cf6; }
+        .card-vazio { border-left-color: #9ca3af; background: #f9fafb;}
+        
+        .voo-card strong {
+            display: block;
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+            color: var(--texto-principal);
+        }
+        
+        .voo-card div {
+            margin-bottom: 0.3rem;
+            font-size: 1.05rem;
+        }
+
+        .btn-rastrear {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: var(--azul-aviacao);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+        
+        .btn-rastrear:hover {
+            background-color: #152c6b;
+        }
+
+        .folga-msg {
+            text-align: center;
+            color: #6b7280;
+            font-size: 1.1rem;
+            padding: 2rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Escala de Voos do Kaio</h1>
+        <div id="relogio-bsb">Carregando horário...</div>
+    </header>
+
+    <div class="container">
+        <div class="escala-container">
+            <div id="painel-contador"></div>
+            <div id="lista-voos">
+                <div class="folga-msg">Lendo arquivo escala.xlsx... ✈️</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dicionarioIATA = {
+            "AJU": "Aracaju", "BEL": "Belém", "BPS": "Porto Seguro", "BSB": "Brasília", 
+            "BVB": "Boa Vista", "CAC": "Cascavel", "CGB": "Cuiabá", "CGH": "São Paulo (Congonhas)", 
+            "CGR": "Campo Grande", "CNF": "Belo Horizonte (Confins)", "CWB": "Curitiba", 
+            "CXJ": "Caxias do Sul", "FLN": "Florianópolis", "FOR": "Fortaleza", 
+            "GIG": "Rio de Janeiro (Galeão)", "GRU": "São Paulo (Guarulhos)", "GYN": "Goiânia",
+            "IGU": "Foz do Iguaçu", "IOS": "Ilhéus", "JDO": "Juazeiro do Norte", 
+            "JJD": "Jericoacoara", "JOI": "Joinville", "JPA": "João Pessoa", "LDB": "Londrina", 
+            "MAO": "Manaus", "MCP": "Macapá", "MCZ": "Maceió", "MGF": "Maringá", 
+            "MOC": "Montes Claros", "NAT": "Natal", "NVT": "Navegantes", "PMW": "Palmas", 
+            "PNZ": "Petrolina", "POA": "Porto Alegre", "PVH": "Porto Velho", "RBR": "Rio Branco", 
+            "REC": "Recife", "SDU": "Rio de Janeiro (Santos Dumont)", "SJP": "São José do Rio Preto", 
+            "SLZ": "São Luís", "SSA": "Salvador", "THE": "Teresina", "UDI": "Uberlândia", 
+            "VCP": "Campinas", "VIX": "Vitória", "XAP": "Chapecó", "RAO": "Ribeirão Preto", "JJG": "Jaguaruna"
+        };
+
+        function formatarIATA(sigla) {
+            if (!sigla) return "";
+            let limpo = sigla.replace(/\(\+1\)|\(\+2\)/g, '').trim().toUpperCase();
+            return dicionarioIATA[limpo] ? `${limpo} (${dicionarioIATA[limpo]})` : limpo;
+        }
+
+        function formatarHoraExcel(valor) {
+            if (!valor && valor !== 0) return "";
+            
+            // Se o SheetJS ler a hora como decimal do Excel, convertemos para HH:MM
+            if (typeof valor === 'number') {
+                let totalMinutos = Math.round(valor * 24 * 60);
+                let horas = Math.floor(totalMinutos / 60);
+                let minutos = totalMinutos % 60;
+                return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
+            }
+            return valor.toString().trim();
+        }
+
+        function atualizarRelogio() {
+            const agora = new Date();
+            const opcoes = { timeZone: 'America/Sao_Paulo', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('relogio-bsb').innerText = agora.toLocaleDateString('pt-BR', opcoes) + ' (BRT)';
+        }
+        setInterval(atualizarRelogio, 1000);
+        atualizarRelogio();
+
+        function extrairHora(texto) {
+            if (!texto) return "";
+            let partes = texto.toString().trim().split(" ");
+            if (partes.length > 1) {
+                return partes[1];
+            }
+            return "";
+        }
+        
+        function extrairSigla(texto) {
+            if (!texto) return "";
+            return texto.toString().trim().split(" ")[0];
+        }
+
+        function normalizarDataExcel(valorData) {
+            if (!valorData) return null;
+            if (typeof valorData === 'number') {
+                const dataJS = new Date(Math.round((valorData - 25569) * 86400 * 1000));
+                return formataDataISO(dataJS);
+            }
+            const stringData = valorData.toString();
+            const regex = /(\d{4})-(\d{2})-(\d{2})/;
+            const match = stringData.match(regex);
+            if (match) {
+                return match[0]; 
+            }
+            return null;
+        }
+
+        async function carregarExcel() {
+            try {
+                const resposta = await fetch('escala.xlsx?v=' + new Date().getTime());
+                if (!resposta.ok) throw new Error("Arquivo não encontrado.");
+                
+                const arrayBuffer = await resposta.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const primeiraAba = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[primeiraAba];
+                
+                const jsonDados = XLSX.utils.sheet_to_json(worksheet, { range: 1 });
+                processarDadosApp(jsonDados);
+            } catch (erro) {
+                console.error(erro);
+                document.getElementById('lista-voos').innerHTML = `<div class="folga-msg" style="color: #ef4444;">Erro ao carregar a escala.<br>Certifique-se de que o arquivo baixado do app foi renomeado para <b>escala.xlsx</b> e está na mesma pasta.</div>`;
+            }
+        }
+
+        function formataDataISO(dataObj) {
+            const ano = dataObj.getFullYear();
+            const mes = String(dataObj.getMonth() + 1).padStart(2, '0');
+            const dia = String(dataObj.getDate()).padStart(2, '0');
+            return `${ano}-${mes}-${dia}`;
+        }
+
+        function formataDataBR(dataObj) {
+            return `${String(dataObj.getDate()).padStart(2, '0')}/${String(dataObj.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function processarDadosApp(jsonDados) {
+            const escalaFormatada = {};
+            let dataAtual = "";
+
+            for (let i = 0; i < jsonDados.length; i++) {
+                const linha = jsonDados[i];
+                
+                const dataEncontrada = normalizarDataExcel(linha["Date"]);
+                if (dataEncontrada) {
+                    dataAtual = dataEncontrada;
+                }
+                
+                if (!dataAtual) continue;
+
+                // Inicializa a estrutura do dia com espaço para a apresentação e término
+                if (!escalaFormatada[dataAtual]) {
+                    escalaFormatada[dataAtual] = {
+                        eventos: [],
+                        apresentacao: "",
+                        termino: ""
+                    };
+                }
+
+                // Extrai a Apresentação e o Término, validando variações da planilha
+                let reportTime = formatarHoraExcel(linha["Duty Report"] || linha["Duty Report "]);
+                let debriefTime = formatarHoraExcel(linha["Duty Debrief"] || linha["Duty Debrief "]);
+
+                // Salva a primeira apresentação do dia
+                if (reportTime && !escalaFormatada[dataAtual].apresentacao) {
+                    escalaFormatada[dataAtual].apresentacao = reportTime;
+                }
+                // Vai atualizando o término para sempre pegar o último valor do dia
+                if (debriefTime) { 
+                    escalaFormatada[dataAtual].termino = debriefTime;
+                }
+
+                let atividadeOriginal = linha["Pairing/Activity"] ? linha["Pairing/Activity"].toString().trim().toUpperCase() : "";
+                let item = linha["Item"] ? linha["Item"].toString().trim().toUpperCase() : "";
+                let partidaTexto = linha["Dep Stn / Dep Time"] ? linha["Dep Stn / Dep Time"].toString() : "";
+                let chegadaTexto = linha["Arr. Stn / Arr. Time"] ? linha["Arr. Stn / Arr. Time"].toString() : "";
+
+                let vooOuStatus = "";
+                
+                if (atividadeOriginal === "DO" || atividadeOriginal === "DR") vooOuStatus = "DO";
+                else if (atividadeOriginal === "HSB" || atividadeOriginal === "HSBE") vooOuStatus = "HSB";
+                else if (atividadeOriginal === "ASB") vooOuStatus = "ASB";
+                else if (atividadeOriginal === "LENG" || atividadeOriginal === "TREI") vooOuStatus = "TREI";
+                
+                if (!vooOuStatus && item.startsWith("LA")) {
+                    vooOuStatus = item;
+                }
+
+                if (!vooOuStatus) continue;
+
+                escalaFormatada[dataAtual].eventos.push({
+                    voo: vooOuStatus,
+                    origem: extrairSigla(partidaTexto),
+                    destino: extrairSigla(chegadaTexto),
+                    horarioPartida: extrairHora(partidaTexto),
+                    horarioChegada: extrairHora(chegadaTexto)
+                });
+            }
+
+            renderizarInterface(escalaFormatada);
+        }
+
+        function calcularProximaFolga(escala, dataHojeStr) {
+            const datas = Object.keys(escala).sort();
+            let dataPrimeiraFolga = null;
+            let indexFolga = -1;
+
+            for (let i = 0; i < datas.length; i++) {
+                if (datas[i] >= dataHojeStr) {
+                    // Agora checamos dentro de .eventos
+                    if (escala[datas[i]].eventos.some(e => e.voo === 'DO')) {
+                        dataPrimeiraFolga = datas[i];
+                        indexFolga = i;
+                        break;
+                    }
+                }
+            }
+
+            if (!dataPrimeiraFolga) return null;
+
+            let consecutivas = 1;
+            for (let i = indexFolga + 1; i < datas.length; i++) {
+                const [ano, mes, dia] = dataPrimeiraFolga.split('-');
+                const nextDate = new Date(ano, mes - 1, dia);
+                nextDate.setDate(nextDate.getDate() + consecutivas);
+                const nextDateStr = formataDataISO(nextDate);
+
+                if (datas[i] === nextDateStr && escala[datas[i]].eventos.some(e => e.voo === 'DO')) {
+                    consecutivas++;
+                } else if (datas[i] > nextDateStr) {
+                    break; 
+                } else if (datas[i] === nextDateStr) {
+                    break;
+                }
+            }
+
+            const [anoHoje, mesHoje, diaHoje] = dataHojeStr.split('-');
+            const dataHojeObj = new Date(anoHoje, mesHoje - 1, diaHoje);
+            const [anoFolga, mesFolga, diaFolga] = dataPrimeiraFolga.split('-');
+            const dataFolgaObj = new Date(anoFolga, mesFolga - 1, diaFolga);
+            
+            const diffTime = Math.ceil((dataFolgaObj - dataHojeObj) / (1000 * 60 * 60 * 24));
+
+            return {
+                diasFaltando: diffTime,
+                consecutivas: consecutivas,
+                tipo: consecutivas === 1 ? "Monofolga" : "Folga dupla ou mais"
+            };
+        }
+
+        function gerarHTMLDia(titulo, dataObj, escala) {
+            const dataStr = formataDataISO(dataObj);
+            const diaDados = escala[dataStr];
+            let html = `<div class="dia-bloco">`;
+            html += `<h3 class="dia-titulo">${titulo} <span style="color:#6b7280; font-size:1.1rem; font-weight:normal;">(${formataDataBR(dataObj)})</span></h3>`;
+
+            if (!diaDados || diaDados.eventos.length === 0) {
+                html += `<div class="voo-card card-vazio"><div style="color:#6b7280;">Sem eventos programados nesta data.</div></div></div>`;
+                return html;
+            }
+
+            // Exibe a barra de jornada (Apresentação e Término) no topo do dia
+            if (diaDados.apresentacao || diaDados.termino) {
+                html += `<div class="painel-jornada">`;
+                if (diaDados.apresentacao) {
+                    html += `<span><span style="font-size:1.1rem;">⏱️</span> Apresentação: ${diaDados.apresentacao}</span>`;
+                }
+                if (diaDados.termino) {
+                    html += `<span><span style="font-size:1.1rem;">🏁</span> Término da Jornada: ${diaDados.termino}</span>`;
+                }
+                html += `</div>`;
+            }
+
+            for (const item of diaDados.eventos) {
+                const origemFormatada = formatarIATA(item.origem);
+                const destinoFormatado = formatarIATA(item.destino);
+
+                if (["DO", "HSB", "ASB", "TREI"].includes(item.voo)) {
+                    let tituloStatus = ""; let icone = ""; let classeCard = ""; let descricao = "";
+
+                    if (item.voo === "DO") { 
+                        tituloStatus = "Folga (DO)"; icone = "🏖️"; classeCard = "card-folga"; 
+                        descricao = "Dia livre! Aproveitando a folga.";
+                    } else if (item.voo === "HSB") { 
+                        tituloStatus = "Sobreaviso (HSB)"; icone = "📱"; classeCard = "card-reserva";
+                        descricao = item.origem ? `Aguardando chamado em: <b>${origemFormatada}</b><br>⏱️ Das ${item.horarioPartida} às ${item.horarioChegada}` : "Aguardando chamado.";
+                    } else if (item.voo === "ASB") { 
+                        tituloStatus = "Reserva (ASB)"; icone = "✈️"; classeCard = "card-reserva";
+                        descricao = item.origem ? `De prontidão em: <b>${origemFormatada}</b><br>⏱️ Das ${item.horarioPartida} às ${item.horarioChegada}` : "De prontidão no aeroporto.";
+                    } else if (item.voo === "TREI") { 
+                        tituloStatus = "Treinamento (TREI)"; icone = "📚"; classeCard = "card-treino";
+                        descricao = item.origem ? `Capacitação em: <b>${origemFormatada}</b><br>⏱️ Das ${item.horarioPartida} às ${item.horarioChegada}` : "Dia de capacitação.";
+                    }
+
+                    html += `
+                        <div class="voo-card ${classeCard}">
+                            <strong style="color: inherit;">${icone} ${tituloStatus}</strong>
+                            <div>${descricao}</div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="voo-card">
+                            <strong style="color: var(--azul-aviacao);">Voo ${item.voo}</strong>
+                            <div>🛫 <b>De:</b> ${origemFormatada} (${item.horarioPartida})</div>
+                            <div>🛬 <b>Para:</b> ${destinoFormatado} (${item.horarioChegada})</div>
+                            <a href="https://www.flightradar24.com/data/flights/${item.voo}" target="_blank" class="btn-rastrear">Abrir no FlightRadar24</a>
+                        </div>
+                    `;
+                }
+            }
+            html += `</div>`;
+            return html;
+        }
+
+        function renderizarInterface(escala) {
+            const hoje = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+            const dataHojeStr = formataDataISO(hoje);
+            
+            const ontem = new Date(hoje); ontem.setDate(hoje.getDate() - 1);
+            const amanha = new Date(hoje); amanha.setDate(hoje.getDate() + 1);
+
+            const painelVoos = document.getElementById('lista-voos');
+            const painelContador = document.getElementById('painel-contador');
+
+            const infoFolga = calcularProximaFolga(escala, dataHojeStr);
+            if (infoFolga) {
+                if (infoFolga.diasFaltando === 0) {
+                    painelContador.innerHTML = `
+                        <div class="contador-folga">
+                            <h3>🎉 Você está de Folga Hoje!</h3>
+                            <p>Aproveite sua <b>${infoFolga.tipo}</b> (${infoFolga.consecutivas} dia${infoFolga.consecutivas > 1 ? 's' : ''}).</p>
+                        </div>
+                    `;
+                } else {
+                    const diasTexto = infoFolga.diasFaltando === 1 ? "Falta 1 dia" : `Faltam ${infoFolga.diasFaltando} dias`;
+                    painelContador.innerHTML = `
+                        <div class="contador-folga" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                            <h3>⏳ ${diasTexto} para a próxima folga!</h3>
+                            <p>Será uma <b>${infoFolga.tipo}</b> (${infoFolga.consecutivas} dia${infoFolga.consecutivas > 1 ? 's' : ''}).</p>
+                        </div>
+                    `;
+                }
+            } else {
+                painelContador.innerHTML = ``;
+            }
+
+            let htmlEscala = "";
+            htmlEscala += gerarHTMLDia("Ontem", ontem, escala);
+            htmlEscala += gerarHTMLDia("🗓️ Hoje", hoje, escala);
+            htmlEscala += gerarHTMLDia("Amanhã", amanha, escala);
+            
+            painelVoos.innerHTML = htmlEscala;
+        }
+
+        carregarExcel();
+    </script>
+</body>
+</html>
