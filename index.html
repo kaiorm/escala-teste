@@ -203,8 +203,6 @@
 
         function formatarHoraExcel(valor) {
             if (!valor && valor !== 0) return "";
-            
-            // Se o SheetJS ler a hora como decimal do Excel, convertemos para HH:MM
             if (typeof valor === 'number') {
                 let totalMinutos = Math.round(valor * 24 * 60);
                 let horas = Math.floor(totalMinutos / 60);
@@ -294,24 +292,16 @@
                 
                 if (!dataAtual) continue;
 
-                // Inicializa a estrutura do dia com espaço para a apresentação e término
                 if (!escalaFormatada[dataAtual]) {
-                    escalaFormatada[dataAtual] = {
-                        eventos: [],
-                        apresentacao: "",
-                        termino: ""
-                    };
+                    escalaFormatada[dataAtual] = { eventos: [], apresentacao: "", termino: "" };
                 }
 
-                // Extrai a Apresentação e o Término, validando variações da planilha
                 let reportTime = formatarHoraExcel(linha["Duty Report"] || linha["Duty Report "]);
                 let debriefTime = formatarHoraExcel(linha["Duty Debrief"] || linha["Duty Debrief "]);
 
-                // Salva a primeira apresentação do dia
                 if (reportTime && !escalaFormatada[dataAtual].apresentacao) {
                     escalaFormatada[dataAtual].apresentacao = reportTime;
                 }
-                // Vai atualizando o término para sempre pegar o último valor do dia
                 if (debriefTime) { 
                     escalaFormatada[dataAtual].termino = debriefTime;
                 }
@@ -353,7 +343,6 @@
 
             for (let i = 0; i < datas.length; i++) {
                 if (datas[i] >= dataHojeStr) {
-                    // Agora checamos dentro de .eventos
                     if (escala[datas[i]].eventos.some(e => e.voo === 'DO')) {
                         dataPrimeiraFolga = datas[i];
                         indexFolga = i;
@@ -394,6 +383,13 @@
             };
         }
 
+        // Função auxiliar para identificar se o dia possui voos comerciais
+        function isVooComercial(dataISO, escala) {
+            if (!escala[dataISO] || !escala[dataISO].eventos || escala[dataISO].eventos.length === 0) return false;
+            // Retorna true se houver qualquer evento que não seja status especial (folga, reserva, etc)
+            return escala[dataISO].eventos.some(e => !["DO", "HSB", "ASB", "TREI"].includes(e.voo));
+        }
+
         function gerarHTMLDia(titulo, dataObj, escala) {
             const dataStr = formataDataISO(dataObj);
             const diaDados = escala[dataStr];
@@ -405,8 +401,10 @@
                 return html;
             }
 
-            // Exibe a barra de jornada (Apresentação e Término) no topo do dia
-            if (diaDados.apresentacao || diaDados.termino) {
+            // Verifica se o dia é EXCLUSIVAMENTE de folga para ocultar o painel de jornada
+            const apenasFolga = diaDados.eventos.every(e => e.voo === 'DO');
+
+            if (!apenasFolga && (diaDados.apresentacao || diaDados.termino)) {
                 html += `<div class="painel-jornada">`;
                 if (diaDados.apresentacao) {
                     html += `<span><span style="font-size:1.1rem;">⏱️</span> Apresentação: ${diaDados.apresentacao}</span>`;
@@ -469,6 +467,7 @@
             const painelVoos = document.getElementById('lista-voos');
             const painelContador = document.getElementById('painel-contador');
 
+            // Renderiza o Contador
             const infoFolga = calcularProximaFolga(escala, dataHojeStr);
             if (infoFolga) {
                 if (infoFolga.diasFaltando === 0) {
@@ -491,11 +490,39 @@
                 painelContador.innerHTML = ``;
             }
 
+            // Inicializa a lista de dias a exibir com a base padrão: Ontem, Hoje e Amanhã
+            let datasParaMostrar = [];
+            datasParaMostrar.push({ titulo: "Ontem", data: ontem });
+            datasParaMostrar.push({ titulo: "🗓️ Hoje", data: hoje });
+            datasParaMostrar.push({ titulo: "Amanhã", data: amanha });
+
+            // Variáveis de controle para o algoritmo de busca estendida
+            let dataLoop = new Date(amanha);
+            let isoLoop = formataDataISO(dataLoop);
+
+            // Algoritmo Raio-X: Se a última data adicionada (no caso inicial, o 'Amanhã') 
+            // for um dia de voo comercial, o sistema continua avançando os dias.
+            while (isVooComercial(isoLoop, escala)) {
+                // Avança um dia no calendário
+                dataLoop.setDate(dataLoop.getDate() + 1);
+                isoLoop = formataDataISO(dataLoop);
+                
+                // Se o próximo dia também for de voo comercial, adiciona na tela
+                if (isVooComercial(isoLoop, escala)) {
+                    const diasSemana = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+                    const tituloDia = diasSemana[dataLoop.getDay()];
+                    datasParaMostrar.push({ titulo: tituloDia, data: new Date(dataLoop) });
+                } else {
+                    // Se esbarrou em uma folga, reserva, etc... encerra a expansão
+                    break;
+                }
+            }
+
+            // Renderiza o HTML final
             let htmlEscala = "";
-            htmlEscala += gerarHTMLDia("Ontem", ontem, escala);
-            htmlEscala += gerarHTMLDia("🗓️ Hoje", hoje, escala);
-            htmlEscala += gerarHTMLDia("Amanhã", amanha, escala);
-            
+            for (const dia of datasParaMostrar) {
+                htmlEscala += gerarHTMLDia(dia.titulo, dia.data, escala);
+            }
             painelVoos.innerHTML = htmlEscala;
         }
 
